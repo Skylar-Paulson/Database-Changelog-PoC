@@ -160,16 +160,11 @@ jobs:
           TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           TAG_DATE=$(date -u +"%Y.%m.%d.%H%M")
 
-          # Prepend numeric prefix for correct sorting (descending: 9,8,7...)
-          # PROD gets highest number (9) so it appears first
-          # QA gets lower number (8) so it appears after PROD
-          if [ "$ENV_LOWER" = "prod" ]; then
-            SORT_PREFIX="9"
-          elif [ "$ENV_LOWER" = "qa" ]; then
-            SORT_PREFIX="8"
-          else
-            SORT_PREFIX="5"  # Default for other environments
-          fi
+          # Count existing tags to generate incrementing prefix
+          # This ensures chronological order (newest first) regardless of environment
+          # GitHub sorts tags descending, so higher numbers appear first
+          TAG_COUNT=$(git tag -l | wc -l)
+          SORT_PREFIX=$((TAG_COUNT + 1))
 
           RELEASE_TAG="${SORT_PREFIX}-${ENV_LOWER}-${TAG_DATE}"
           RELEASE_NAME="${ENV_UPPER} - ${TAG_DATE}"
@@ -177,7 +172,7 @@ jobs:
           echo "tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
           echo "name=$RELEASE_NAME" >> $GITHUB_OUTPUT
           echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
-          echo "Release tag: $RELEASE_TAG"
+          echo "Release tag: $RELEASE_TAG (prefix: $SORT_PREFIX based on $TAG_COUNT existing tags)"
 
       - name: Generate compiled SQL file
         if: steps.sql_files.outputs.has_changes == 'true'

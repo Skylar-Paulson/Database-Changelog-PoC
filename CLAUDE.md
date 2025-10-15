@@ -1,5 +1,38 @@
 # Database Changelog Tracking System - CLAUDE.md
 
+## Table of Contents
+
+- [Project Overview](#project-overview)
+- [The Problem Being Solved](#the-problem-being-solved)
+- [Repository Structure](#repository-structure)
+- [Branch Structure](#branch-structure)
+- [Workflow Process](#workflow-process)
+  - [Developer Workflow (Daily Use)](#developer-workflow-daily-use)
+  - [Manager Workflow (Environment Promotion)](#manager-workflow-environment-promotion)
+- [File Naming Conventions](#file-naming-conventions)
+- [Release Artifacts (3 files per release)](#release-artifacts-3-files-per-release)
+- [Release Naming Convention](#release-naming-convention)
+- [GitHub Actions Workflows](#github-actions-workflows)
+  - [1. Automatic Release Generation](#1-automatic-release-generation-generate-releaseyml)
+  - [2. Manual Release Generation](#2-manual-release-generation-manual-releaseyml)
+- [Key Technical Decisions](#key-technical-decisions)
+  - [1. Git Commit Timestamps for Ordering](#1-git-commit-timestamps-for-ordering)
+  - [2. No File Naming Validation](#2-no-file-naming-validation)
+  - [3. Branch Protection](#3-branch-protection)
+  - [4. Multi-Schema Support](#4-multi-schema-support)
+- [Integration with Existing Systems](#integration-with-existing-systems)
+  - [Release Note Generation](#release-note-generation)
+  - [Jira Integration](#jira-integration)
+- [Important Notes](#important-notes)
+  - [✅ DO](#-do)
+  - [❌ DON'T](#-dont)
+- [Testing & Proof of Concept](#testing--proof-of-concept)
+- [Success Criteria](#success-criteria)
+- [Future Considerations (If PoC Approved)](#future-considerations-if-poc-approved)
+- [Documentation Files](#documentation-files)
+- [Databases at ExampleCorp](#databases-at-examplecorp)
+- [Contact & Questions](#contact--questions)
+
 ## Project Overview
 
 This is a **proof-of-concept** Git repository for tracking database changes across multiple environments (dev, qa, prod) at ExampleCorp.

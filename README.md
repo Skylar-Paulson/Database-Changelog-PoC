@@ -9,6 +9,49 @@
 
 ---
 
+## Table of Contents
+
+- [Overview](#overview)
+  - [The Problem](#the-problem)
+  - [The Solution](#the-solution)
+- [Quick Start](#quick-start)
+  - [1. Clone the Repository](#1-clone-the-repository)
+  - [2. Understand the Structure](#2-understand-the-structure)
+  - [3. Read the Documentation](#3-read-the-documentation)
+  - [4. Understand the Branches](#4-understand-the-branches)
+- [Key Features](#key-features)
+- [Release Assets](#release-assets)
+  - [1. Compiled SQL File (Main Deployment File)](#1-compiled-sql-file-main-deployment-file)
+  - [2. ZIP Archive (Reference/Audit)](#2-zip-archive-referenceaudit)
+  - [3. Release Notes (Context)](#3-release-notes-context)
+- [Repository Structure](#repository-structure)
+- [Workflows](#workflows)
+  - [1. Generate Release File (Automatic)](#1-generate-release-file-automatic)
+  - [2. Manual Release Generation](#2-manual-release-generation)
+  - [3. SQL Naming Validation (Optional)](#3-sql-naming-validation-optional)
+- [Branches](#branches)
+  - [Environment-Branch Mapping](#environment-branch-mapping)
+  - [Branch Protection Rules](#branch-protection-rules)
+- [How It Works](#how-it-works)
+  - [Developer Workflow (Making a Change)](#developer-workflow-making-a-change)
+  - [Promotion Workflow (Dev → QA → Prod)](#promotion-workflow-dev--qa--prod)
+- [Status: Proof of Concept](#status-proof-of-concept)
+  - [What's Included](#whats-included)
+  - [Success Criteria](#success-criteria)
+  - [Next Steps (If Approved)](#next-steps-if-approved)
+- [Documentation](#documentation)
+  - [For Users](#for-users)
+  - [For Architects/Implementers](#for-architectsimplementers)
+- [Usage](#usage)
+  - [For Developers](#for-developers)
+  - [For Managers/Release Coordinators](#for-managersrelease-coordinators)
+- [Questions or Issues](#questions-or-issues)
+- [Contributing](#contributing)
+- [License](#license)
+- [Summary](#summary)
+
+---
+
 ## Overview
 
 This repository provides a **proof-of-concept** system for tracking database schema and data changes across multiple environments (dev, qa, prod) using Git as the source of truth. The system automates the generation of SQL migration scripts during environment promotions, ensuring database changes are never missed during code releases.

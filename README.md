@@ -103,15 +103,15 @@ The repository is organized by database schema:
 
 ```
 database-changelog-test/
-├── auth/              # User security database changes (auth, RBAC, audit)
-├── application/   # Application database changes (business logic)
-├── integrations/          # Credentials database changes (tokens, data sources)
-├── tenants/       # Client schema changes (multi-tenant structures)
-├── .github/workflows/    # GitHub Actions workflows
-├── docs/                 # Documentation
+├── auth/              # Authentication and authorization changes
+├── application/       # Core application database changes
+├── integrations/      # Third-party integration data changes
+├── tenants/           # Multi-tenant schema changes
+├── .github/workflows/ # GitHub Actions workflows
+├── docs/              # Documentation
 │   ├── Database-Changelog-Spec.md    # Technical specification
 │   └── USER-GUIDE.md                 # How to use this system
-└── README.md             # This file
+└── README.md          # This file
 ```
 
 ### 3. Read the Documentation
@@ -167,7 +167,7 @@ Example:
 -- Schema: auth
 -- File: auth/add_user_role_column.sql
 -- Commit: a1b2c3d4
--- Message: Add user role column for RBAC support
+-- Message: Add user role column for authorization
 -- Author: john.doe@example.com
 -- Date: 2025-10-15 12:00:00
 -- ============================================================
@@ -197,10 +197,10 @@ ALTER TABLE users ADD COLUMN default_role_id INT NULL;
 
 | Folder | Database | Purpose |
 |--------|----------|---------|
-| `auth/` | User security database | Authentication (Cognito), authorization (RBAC), audit trails, user management |
-| `application/` | Application database | Business logic, user data, companies, NLP features, application data |
-| `integrations/` | Credentials database | Token definitions, data sources, metrics, dimensions, API integrations |
-| `tenants/` | Client databases | Client-specific schema changes that apply to multiple client databases |
+| `auth/` | Authentication database | User authentication, authorization, access control, audit trails |
+| `application/` | Application database | Core business logic, application data, user information |
+| `integrations/` | Integration database | External API credentials, third-party service configurations |
+| `tenants/` | Tenant databases | Multi-tenant schema changes applicable across client databases |
 | `.github/workflows/` | N/A | GitHub Actions workflows for automated and manual release generation |
 | `docs/` | N/A | Documentation (specification, user guide) |
 

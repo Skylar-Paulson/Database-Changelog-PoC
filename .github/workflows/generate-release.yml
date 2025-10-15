@@ -159,7 +159,7 @@ jobs:
           # First pass: count files per commit
           declare -A commit_file_counts
           while IFS=' ' read -r timestamp file commit_hash; do
-            ((commit_file_counts[$commit_hash]++))
+            commit_file_counts[$commit_hash]=$((${commit_file_counts[$commit_hash]:-0} + 1))
           done < /tmp/sorted_files.txt
 
           # Second pass: generate SQL with commit grouping

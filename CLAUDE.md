@@ -239,7 +239,7 @@ Each GitHub Release contains:
 
 This repository includes example SQL files for testing:
 - `auth/` - MFA column, role permissions
-- `application/` - Report templates, NLP indexes
+- `application/` - Report templates, text indexes
 - `integrations/` - Token expiration updates
 - `tenants/` - Custom metrics column
 
@@ -280,8 +280,8 @@ For this PoC to be considered successful:
 
 ## Databases at ExampleCorp
 
-- **auth** - User security, authentication, authorization (Cognito users, roles, permissions)
-- **app_central** - Business logic, user data (companies, users, tokens, NLP)
+- **auth** - User security, authentication, authorization (user accounts, roles, permissions)
+- **app_central** - Business logic, user data (companies, users, application tokens)
 - **integrations** - Token definitions, data sources, metrics, dimensions
 - **orchestrator** - Orchestrator-specific data
 - **documents** - Document storage

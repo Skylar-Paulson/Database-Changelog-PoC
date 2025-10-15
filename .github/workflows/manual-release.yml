@@ -1,0 +1,267 @@
+name: Manual Database Changelog Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+      since_date:
+        description: 'Compile changes since date (YYYY-MM-DD) - optional'
+        required: false
+        type: string
+      since_tag:
+        description: 'Compile changes since tag - optional'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  generate-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for accurate git log
+
+      - name: Validate inputs
+        id: validate
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          SINCE_DATE: ${{ inputs.since_date }}
+          SINCE_TAG: ${{ inputs.since_tag }}
+        run: |
+          # Validate environment
+          if [[ ! "$ENVIRONMENT" =~ ^(dev|qa|prod)$ ]]; then
+            echo "::error::Invalid environment: $ENVIRONMENT"
+            exit 1
+          fi
+
+          # Validate date format if provided
+          if [ -n "$SINCE_DATE" ]; then
+            if ! date -d "$SINCE_DATE" >/dev/null 2>&1; then
+              echo "::error::Invalid date format: $SINCE_DATE (expected YYYY-MM-DD)"
+              exit 1
+            fi
+          fi
+
+          # Validate tag exists if provided
+          if [ -n "$SINCE_TAG" ]; then
+            if ! git rev-parse "$SINCE_TAG" >/dev/null 2>&1; then
+              echo "::error::Tag not found: $SINCE_TAG"
+              exit 1
+            fi
+          fi
+
+          echo "env_lower=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "env_upper=$(echo $ENVIRONMENT | tr '[:lower:]' '[:upper:]')" >> $GITHUB_OUTPUT
+
+      - name: Determine start point for changes
+        id: start_point
+        env:
+          ENV_LOWER: ${{ steps.validate.outputs.env_lower }}
+          SINCE_DATE: ${{ inputs.since_date }}
+          SINCE_TAG: ${{ inputs.since_tag }}
+        run: |
+          # Priority: since_tag > since_date > last release tag
+          if [ -n "$SINCE_TAG" ]; then
+            echo "since=$SINCE_TAG" >> $GITHUB_OUTPUT
+            echo "display=$SINCE_TAG" >> $GITHUB_OUTPUT
+            echo "Using tag: $SINCE_TAG"
+          elif [ -n "$SINCE_DATE" ]; then
+            # Get commit at or before the specified date
+            COMMIT=$(git rev-list -1 --before="$SINCE_DATE" HEAD)
+            if [ -z "$COMMIT" ]; then
+              echo "::error::No commits found before date: $SINCE_DATE"
+              exit 1
+            fi
+            echo "since=$COMMIT" >> $GITHUB_OUTPUT
+            echo "display=$SINCE_DATE" >> $GITHUB_OUTPUT
+            echo "Using date: $SINCE_DATE (commit: $COMMIT)"
+          else
+            # Find the last release tag for THIS ENVIRONMENT ONLY
+            # Each environment (dev/qa/prod) maintains independent release history
+            # Example: If ENV_LOWER="qa", only searches for "qa-*" tags (ignores "prod-*", "dev-*")
+            # This ensures QA releases start from last QA release, not from PROD releases
+            LAST_TAG=$(git tag -l "${ENV_LOWER}-*" --sort=-version:refname | head -1)
+            if [ -z "$LAST_TAG" ]; then
+              # No previous release, use first commit
+              FIRST_COMMIT=$(git rev-list --max-parents=0 HEAD)
+              echo "since=$FIRST_COMMIT" >> $GITHUB_OUTPUT
+              echo "display=repository start" >> $GITHUB_OUTPUT
+              echo "No previous release found, using repository start"
+            else
+              echo "since=$LAST_TAG" >> $GITHUB_OUTPUT
+              echo "display=$LAST_TAG" >> $GITHUB_OUTPUT
+              echo "Using last release tag: $LAST_TAG"
+            fi
+          fi
+
+      - name: Get changed SQL files
+        id: sql_files
+        env:
+          SINCE: ${{ steps.start_point.outputs.since }}
+        run: |
+          # Get all SQL files added since the start point
+          mapfile -t SQL_FILES < <(git diff --name-only --diff-filter=A "$SINCE"...HEAD -- "*.sql" | \
+            grep -v "^\.github/" | \
+            grep -v "^docs/" || true)
+
+          if [ ${#SQL_FILES[@]} -eq 0 ]; then
+            echo "::error::No SQL files changed since $SINCE"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+          echo "Found ${#SQL_FILES[@]} changed SQL files"
+
+          # Save files to a temporary file for next step
+          printf '%s\n' "${SQL_FILES[@]}" > /tmp/sql_files.txt
+
+      - name: Order files by commit timestamp
+        if: steps.sql_files.outputs.has_changes == 'true'
+        id: ordered_files
+        run: |
+          # Read SQL files and get their commit timestamps
+          declare -A file_timestamps
+          declare -A file_commits
+
+          while IFS= read -r file; do
+            # Get the timestamp when file was first added
+            timestamp=$(git log --diff-filter=A --format=%at --all -- "$file" | head -1)
+            commit_hash=$(git log --diff-filter=A --format=%h --all -- "$file" | head -1)
+            file_timestamps["$file"]="$timestamp"
+            file_commits["$file"]="$commit_hash"
+          done < /tmp/sql_files.txt
+
+          # Sort files by timestamp
+          for file in "${!file_timestamps[@]}"; do
+            echo "${file_timestamps[$file]} $file ${file_commits[$file]}"
+          done | sort -n > /tmp/sorted_files.txt
+
+          echo "Files sorted by commit timestamp"
+
+      - name: Generate release tag and timestamp
+        id: release_info
+        env:
+          ENV_LOWER: ${{ steps.validate.outputs.env_lower }}
+          ENV_UPPER: ${{ steps.validate.outputs.env_upper }}
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          TAG_DATE=$(date -u +"%Y.%m.%d.%H%M")
+
+          RELEASE_TAG="${ENV_LOWER}-${TAG_DATE}"
+          RELEASE_NAME="${ENV_UPPER} - ${TAG_DATE}"
+
+          echo "tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "name=$RELEASE_NAME" >> $GITHUB_OUTPUT
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "Release tag: $RELEASE_TAG"
+
+      - name: Generate compiled SQL file
+        if: steps.sql_files.outputs.has_changes == 'true'
+        env:
+          ENV_UPPER: ${{ steps.validate.outputs.env_upper }}
+          TIMESTAMP: ${{ steps.release_info.outputs.timestamp }}
+          RELEASE_TAG: ${{ steps.release_info.outputs.tag }}
+          SINCE_DISPLAY: ${{ steps.start_point.outputs.display }}
+        run: |
+          OUTPUT_FILE="database-changelog-${RELEASE_TAG}.sql"
+
+          # Count total files
+          TOTAL_FILES=$(wc -l < /tmp/sorted_files.txt)
+
+          # Write header
+          cat > "$OUTPUT_FILE" << EOF
+          -- ============================================
+          -- DATABASE CHANGELOG RELEASE
+          -- Environment: $ENV_UPPER
+          -- Generated: $TIMESTAMP
+          -- Release Tag: $RELEASE_TAG
+          -- Changes Since: $SINCE_DISPLAY
+          -- ============================================
+
+          EOF
+
+          # Process each file
+          CHANGE_NUM=1
+          while IFS=' ' read -r timestamp file commit_hash; do
+            # Get commit date and full commit message in human-readable format
+            commit_date=$(git log -1 --format=%ci "$commit_hash" -- "$file")
+
+            # Get full commit message body and format for SQL comments
+            # %B gives full commit message with body (vs %s which is just subject line)
+            # For multi-line messages, prefix continuation lines with comment prefix
+            # This keeps readability while ensuring everything stays safely commented
+            commit_message=$(git log -1 --format=%B "$commit_hash" -- "$file" | head -c 5000 | sed '2,$s/^/--          /' | sed '/^[[:space:]]*$/d')
+
+            # Extract schema folder (first directory component)
+            schema_folder=$(dirname "$file")
+            filename=$(basename "$file")
+
+            # Write change header
+            cat >> "$OUTPUT_FILE" << EOF
+          -- ============================================
+          -- Change $CHANGE_NUM of $TOTAL_FILES
+          -- File: $schema_folder/$filename
+          -- Committed: $commit_date
+          -- Commit: $commit_hash
+          -- Message: $commit_message
+          -- ============================================
+          EOF
+
+            # Append file contents
+            cat "$file" >> "$OUTPUT_FILE"
+
+            # Ensure statement ends with semicolon
+            # Check if the last non-empty line ends with a semicolon
+            if ! tail -1 "$OUTPUT_FILE" | grep -q ';[[:space:]]*$'; then
+              # Last line doesn't end with semicolon, add one
+              echo ";" >> "$OUTPUT_FILE"
+            fi
+
+            # Add blank lines between statements for readability
+            echo "" >> "$OUTPUT_FILE"
+            echo "" >> "$OUTPUT_FILE"
+
+            ((CHANGE_NUM++))
+          done < /tmp/sorted_files.txt
+
+          echo "Generated compiled SQL file: $OUTPUT_FILE"
+          echo "output_file=$OUTPUT_FILE" >> $GITHUB_ENV
+
+      - name: Create ZIP archive
+        if: steps.sql_files.outputs.has_changes == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release_info.outputs.tag }}
+        run: |
+          ZIP_FILE="database-changelog-${RELEASE_TAG}.zip"
+
+          # Create ZIP with all changed SQL files, preserving folder structure
+          zip -r "$ZIP_FILE" $(cat /tmp/sql_files.txt | tr '\n' ' ')
+
+          echo "Created ZIP archive: $ZIP_FILE"
+          echo "zip_file=$ZIP_FILE" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        if: steps.sql_files.outputs.has_changes == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: ${{ steps.release_info.outputs.name }}
+          generate_release_notes: true
+          files: |
+            ${{ env.output_file }}
+            ${{ env.zip_file }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

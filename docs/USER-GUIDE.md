@@ -87,7 +87,7 @@ auth/add_user_role_column.sql
 
 **File contents:**
 ```sql
--- Add default_role_id to users for RBAC support
+-- Add default_role_id to users for authorization support
 ALTER TABLE users ADD COLUMN default_role_id INT NULL;
 ALTER TABLE users ADD FOREIGN KEY (default_role_id) REFERENCES role(id);
 ```
@@ -98,7 +98,7 @@ Commit the SQL file to the dev branch with a descriptive message:
 ```bash
 git checkout dev
 git add auth/20251015_1200_add_user_role_column.sql
-git commit -m "Add default_role_id column to users for RBAC support"
+git commit -m "Add default_role_id column to users for authorization support"
 git push origin dev
 ```
 
@@ -114,10 +114,10 @@ Your change is now tracked in Git and ready to be promoted to QA when the next r
 
 | Folder | Database | Use For |
 |--------|----------|---------|
-| `auth/` | User security database | Authentication, authorization, user management, roles, permissions, audit trails |
-| `application/` | Application database | Business logic, user data, companies, NLP features, application data |
-| `integrations/` | Credentials database | Token definitions, data sources, metrics, dimensions, API integrations |
-| `tenants/` | Client databases | Client-specific schema changes that apply to multiple client databases |
+| `auth/` | Authentication database | Authentication, authorization, user management, roles, permissions, audit trails |
+| `application/` | Application database | Business logic, user data, companies, core application features, application data |
+| `integrations/` | Integration database | Token definitions, data sources, metrics, dimensions, API integrations |
+| `tenants/` | Tenant databases | Client-specific schema changes that apply to multiple client databases |
 
 **Example:**
 - Adding a column to `users` table → `auth/`
@@ -235,7 +235,7 @@ Open the downloaded SQL file and review:
 -- Schema: auth
 -- File: auth/add_user_role_column.sql
 -- Commit: a1b2c3d4
--- Message: Add user role column for RBAC support
+-- Message: Add user role column for authorization support
 -- Author: john.doe@example.com
 -- Date: 2025-10-15 12:00:00
 -- ============================================================
@@ -437,10 +437,10 @@ Git automatically excludes changes that already exist in the target branch!
 
 ### auth/
 
-**Database:** User security database
+**Database:** Authentication database
 
 **Contains:**
-- Authentication tables (Cognito users, user pools)
+- Authentication tables (user accounts, sessions)
 - Authorization tables (roles, permissions, user groups)
 - Audit trails
 - User management
@@ -471,7 +471,7 @@ CREATE TABLE audit_log (
 **Contains:**
 - User data (app_users)
 - Company data (companies)
-- NLP features
+- Text processing features
 - Business logic tables
 - Application data
 
@@ -480,11 +480,11 @@ CREATE TABLE audit_log (
 -- Add company index for performance
 CREATE INDEX idx_user_company ON app_users(company_id);
 
--- Create NLP synonym learning table
-CREATE TABLE synonym_mappings (
+-- Create text mapping table
+CREATE TABLE text_mappings (
     id INT PRIMARY KEY AUTO_INCREMENT,
     original_term VARCHAR(255),
-    learned_synonym VARCHAR(255),
+    mapped_term VARCHAR(255),
     confidence DECIMAL(5,2)
 );
 ```
@@ -862,7 +862,7 @@ auth/user_role_complete_feature.sql   # Column + roles + indexes + data
 
 ```bash
 # GOOD
-git commit -m "Add default_role_id to users for RBAC support"
+git commit -m "Add default_role_id to users for authorization support"
 
 # BAD
 git commit -m "Update database"

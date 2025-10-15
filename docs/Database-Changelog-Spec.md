@@ -1294,7 +1294,7 @@ tenants/20251017_1100_add_campaign_field.sql
 -- Schema: auth
 -- File: auth/20251015_1200_add_user_role_column.sql
 -- Commit: a1b2c3d4
--- Message: Add user role column for RBAC support
+-- Message: Add user role column for authorization support
 -- Author: john.doe@example.com
 -- Date: 2025-10-15 12:00:00
 -- ============================================================
@@ -1430,16 +1430,16 @@ UPDATE api_tokens SET public = 1 WHERE internal_text_id IN ('METRIC', 'DIMENSION
 
 Each schema folder should contain diverse examples to test the system comprehensively:
 
-**auth/** - User security schema examples:
-- Add role columns for RBAC support
+**auth/** - Authentication schema examples:
+- Add role columns for authorization support
 - Insert default system roles (admin, user, viewer)
 - Create audit logging tables
 - Add permission tracking columns
 - Simple and complex ALTER TABLE statements
 
-**application/** - Central schema examples:
+**application/** - Application schema examples:
 - Add indexes for performance optimization
-- Create new tables for features (e.g., NLP synonym learning)
+- Create new tables for features (e.g., text processing, data mappings)
 - Add columns to existing user/company tables
 - Update foreign key relationships
 - Mix of DDL (schema) and DML (data) changes

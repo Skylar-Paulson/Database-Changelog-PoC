@@ -149,48 +149,66 @@ jobs:
 
           EOF
 
-          # Process each file
-          CHANGE_NUM=1
+          # Process files grouped by commit to avoid duplicate commit messages
+          # When multiple files are changed in the same commit, show the commit message once
+
+          PREV_COMMIT=""
+          COMMIT_FILE_NUM=0
+          COMMIT_NUM=1
+
+          # First pass: count files per commit
+          declare -A commit_file_counts
           while IFS=' ' read -r timestamp file commit_hash; do
-            # Get commit date and full commit message in human-readable format
-            commit_date=$(git log -1 --format=%ci "$commit_hash" -- "$file")
+            commit_file_counts[$commit_hash]=$((${commit_file_counts[$commit_hash]:-0} + 1))
+          done < /tmp/sorted_files.txt
 
-            # Get full commit message body and format for SQL comments
-            # %B gives full commit message with body (vs %s which is just subject line)
-            # For multi-line messages, prefix continuation lines with comment prefix
-            # This keeps readability while ensuring everything stays safely commented
-            commit_message=$(git log -1 --format=%B "$commit_hash" -- "$file" | head -c 5000 | sed '2,$s/^/--          /' | sed '/^[[:space:]]*$/d')
+          # Second pass: generate SQL with commit grouping
+          while IFS=' ' read -r timestamp file commit_hash; do
+            # Check if this is a new commit
+            if [ "$commit_hash" != "$PREV_COMMIT" ]; then
+              # New commit - output commit header once
+              COMMIT_FILE_NUM=1
+              TOTAL_COMMIT_FILES=${commit_file_counts[$commit_hash]}
 
-            # Extract schema folder (first directory component)
+              commit_date=$(git log -1 --format=%ci "$commit_hash")
+              commit_message=$(git log -1 --format=%B "$commit_hash" | head -c 5000 | sed '2,$s/^/--          /' | sed '/^[[:space:]]*$/d')
+
+              cat >> "$OUTPUT_FILE" << EOF
+          -- ============================================
+          -- Commit $COMMIT_NUM: $commit_hash
+          -- Date: $commit_date
+          -- Files in this commit: $TOTAL_COMMIT_FILES
+          -- Message: $commit_message
+          -- ============================================
+
+          EOF
+              ((COMMIT_NUM++))
+              PREV_COMMIT="$commit_hash"
+            fi
+
+            # Output simplified file header
             schema_folder=$(dirname "$file")
             filename=$(basename "$file")
 
-            # Write change header
             cat >> "$OUTPUT_FILE" << EOF
-          -- ============================================
-          -- Change $CHANGE_NUM of $TOTAL_FILES
-          -- File: $schema_folder/$filename
-          -- Committed: $commit_date
-          -- Commit: $commit_hash
-          -- Message: $commit_message
-          -- ============================================
+          -- --------------------------------------------
+          -- File $COMMIT_FILE_NUM of $TOTAL_COMMIT_FILES: $schema_folder/$filename
+          -- --------------------------------------------
           EOF
 
             # Append file contents
             cat "$file" >> "$OUTPUT_FILE"
 
             # Ensure statement ends with semicolon
-            # Check if the last non-empty line ends with a semicolon
             if ! tail -1 "$OUTPUT_FILE" | grep -q ';[[:space:]]*$'; then
-              # Last line doesn't end with semicolon, add one
               echo ";" >> "$OUTPUT_FILE"
             fi
 
-            # Add blank lines between statements for readability
+            # Add blank lines between files
             echo "" >> "$OUTPUT_FILE"
             echo "" >> "$OUTPUT_FILE"
 
-            ((CHANGE_NUM++))
+            ((COMMIT_FILE_NUM++))
           done < /tmp/sorted_files.txt
 
           echo "Generated compiled SQL file: $OUTPUT_FILE"
@@ -209,6 +227,80 @@ jobs:
           echo "Created ZIP archive: $ZIP_FILE"
           echo "zip_file=$ZIP_FILE" >> $GITHUB_ENV
 
+      - name: Generate release notes
+        if: steps.sql_files.outputs.has_changes == 'true'
+        id: release_notes
+        env:
+          LAST_TAG: ${{ steps.last_tag.outputs.tag }}
+          SINCE_DISPLAY: ${{ steps.last_tag.outputs.display }}
+          ENV_UPPER: ${{ steps.env.outputs.env }}
+          RELEASE_TAG: ${{ steps.release_info.outputs.tag }}
+          TIMESTAMP: ${{ steps.release_info.outputs.timestamp }}
+        run: |
+          # Generate custom release notes with commit list
+
+          # Count SQL files
+          TOTAL_FILES=$(wc -l < /tmp/sorted_files.txt)
+
+          # Get commit list since last release
+          if [ -n "$LAST_TAG" ]; then
+            # Get commits between last tag and HEAD, format as markdown list
+            COMMITS=$(git log --pretty=format:"* %s (%h) - %an" "${LAST_TAG}..HEAD" | head -20)
+            COMPARE_LINK="**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_TAG}...${RELEASE_TAG}"
+          else
+            # First release, show recent commits
+            COMMITS=$(git log --pretty=format:"* %s (%h) - %an" HEAD | head -20)
+            COMPARE_LINK="**Full Changelog**: https://github.com/${{ github.repository }}/commits/${RELEASE_TAG}"
+          fi
+
+          # Build release notes
+          cat > /tmp/release_notes.md << 'EOF'
+          ## Database Changelog Release
+
+          **Environment:** $ENV_UPPER
+          **Generated:** $TIMESTAMP
+          **Changes Since:** $SINCE_DISPLAY
+          **Total SQL Files:** $TOTAL_FILES
+
+          ### Release Assets
+
+          1. **Compiled SQL File** (`database-changelog-$RELEASE_TAG.sql`)
+             - Main deployment file - copy-paste ready for execution
+             - Contains all database changes in chronological order with metadata
+
+          2. **ZIP Archive** (`database-changelog-$RELEASE_TAG.zip`)
+             - Individual SQL files in original folder structure
+             - For reference, audit trail, or debugging
+
+          3. **Release Notes** (this file)
+             - Context and commit history for this release
+
+          ### How to Deploy
+
+          1. Download the compiled SQL file from this release
+          2. Review all SQL statements carefully
+          3. Execute in the $ENV_UPPER database(s)
+          4. Verify changes were applied successfully
+
+          ### Commits Included
+
+          EOF
+
+          # Append commits
+          echo "$COMMITS" >> /tmp/release_notes.md
+          echo "" >> /tmp/release_notes.md
+          echo "$COMPARE_LINK" >> /tmp/release_notes.md
+
+          # Substitute environment variables in the markdown
+          envsubst < /tmp/release_notes.md > /tmp/release_notes_final.md
+
+          # Output for next step (escape newlines for GitHub Actions)
+          {
+            echo 'body<<RELEASE_NOTES_EOF'
+            cat /tmp/release_notes_final.md
+            echo 'RELEASE_NOTES_EOF'
+          } >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         if: steps.sql_files.outputs.has_changes == 'true'
         id: create_release
@@ -216,7 +308,7 @@ jobs:
         with:
           tag_name: ${{ steps.release_info.outputs.tag }}
           name: ${{ steps.release_info.outputs.name }}
-          generate_release_notes: true
+          body: ${{ steps.release_notes.outputs.body }}
           files: |
             ${{ env.output_file }}
             ${{ env.zip_file }}

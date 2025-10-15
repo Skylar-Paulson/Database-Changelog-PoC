@@ -308,6 +308,7 @@ jobs:
         with:
           tag_name: ${{ steps.release_info.outputs.tag }}
           name: ${{ steps.release_info.outputs.name }}
+          target_commitish: ${{ steps.env.outputs.env_lower }}
           body: ${{ steps.release_notes.outputs.body }}
           files: |
             ${{ env.output_file }}

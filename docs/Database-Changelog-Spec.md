@@ -542,7 +542,7 @@ database-changelog-test/
 │   ├── add_default_roles.sql
 │   └── ...
 ├── application/
-│   ├── 20251015_1330_create_nlp_table.sql
+│   ├── 20251015_1330_create_text_mapping_table.sql
 │   ├── company_index.sql
 │   └── ...
 ├── integrations/

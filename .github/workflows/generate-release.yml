@@ -116,7 +116,18 @@ jobs:
           TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           TAG_DATE=$(date -u +"%Y.%m.%d.%H%M")
 
-          RELEASE_TAG="${ENV_LOWER}-${TAG_DATE}"
+          # Prepend numeric prefix for correct sorting (descending: 9,8,7...)
+          # PROD gets highest number (9) so it appears first
+          # QA gets lower number (8) so it appears after PROD
+          if [ "$ENV_LOWER" = "prod" ]; then
+            SORT_PREFIX="9"
+          elif [ "$ENV_LOWER" = "qa" ]; then
+            SORT_PREFIX="8"
+          else
+            SORT_PREFIX="5"  # Default for other environments
+          fi
+
+          RELEASE_TAG="${SORT_PREFIX}-${ENV_LOWER}-${TAG_DATE}"
           RELEASE_NAME="${ENV_UPPER} - ${TAG_DATE}"
 
           echo "tag=$RELEASE_TAG" >> $GITHUB_OUTPUT

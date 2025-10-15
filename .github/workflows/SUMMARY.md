@@ -1,6 +1,15 @@
 GitHub Actions Workflows Created for Database Changelog Release Generation
 ===========================================================================
 
+## Table of Contents
+
+- [FILES CREATED](#files-created)
+- [WORKFLOW FEATURES](#workflow-features)
+- [RELEASE FORMAT](#release-format)
+- [ARTIFACTS](#artifacts)
+- [SECURITY](#security)
+- [USAGE](#usage)
+
 FILES CREATED:
 --------------
 1. .github/workflows/generate-release.yml (7,169 bytes)

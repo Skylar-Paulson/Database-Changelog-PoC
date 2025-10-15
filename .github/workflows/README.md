@@ -2,6 +2,19 @@
 
 This directory contains GitHub Actions workflows for automatically generating database changelog releases from SQL migration files.
 
+## Table of Contents
+
+- [Workflows](#workflows)
+  - [1. Automatic Release Generation](#1-automatic-release-generation-generate-releaseyml)
+  - [2. Manual Release Generation](#2-manual-release-generation-manual-releaseyml)
+- [Release Artifacts](#release-artifacts)
+- [Tag Format](#tag-format)
+- [Schema Folders](#schema-folders)
+- [File Ordering](#file-ordering)
+- [Security](#security)
+- [Troubleshooting](#troubleshooting)
+- [Example Workflow Run](#example-workflow-run)
+
 ## Workflows
 
 ### 1. Automatic Release Generation (`generate-release.yml`)

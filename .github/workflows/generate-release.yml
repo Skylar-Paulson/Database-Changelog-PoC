@@ -116,19 +116,19 @@ jobs:
           TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           TAG_DATE=$(date -u +"%Y.%m.%d.%H%M")
 
-          # Count existing tags to generate incrementing prefix
-          # This ensures chronological order (newest first) regardless of environment
-          # GitHub sorts tags descending, so higher numbers appear first
+          # Count existing tags to generate incrementing suffix
+          # This ensures chronological order (newest first) with timestamp sorting
+          # GitHub sorts tags alphabetically, so YYYY.MM.DD.HHMM-## ensures newest at top
           TAG_COUNT=$(git tag -l | wc -l)
-          SORT_PREFIX=$((TAG_COUNT + 1))
+          SORT_SUFFIX=$((TAG_COUNT + 1))
 
-          RELEASE_TAG="${SORT_PREFIX}-${ENV_LOWER}-${TAG_DATE}"
+          RELEASE_TAG="${TAG_DATE}-${SORT_SUFFIX}"
           RELEASE_NAME="${ENV_UPPER} - ${TAG_DATE}"
 
           echo "tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
           echo "name=$RELEASE_NAME" >> $GITHUB_OUTPUT
           echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
-          echo "Release tag: $RELEASE_TAG (prefix: $SORT_PREFIX based on $TAG_COUNT existing tags)"
+          echo "Release tag: $RELEASE_TAG (suffix: $SORT_SUFFIX based on $TAG_COUNT existing tags)"
 
       - name: Generate compiled SQL file
         if: steps.sql_files.outputs.has_changes == 'true'

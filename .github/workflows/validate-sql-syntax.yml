@@ -1,0 +1,164 @@
+name: Validate SQL Syntax
+
+on:
+  pull_request:
+    paths:
+      - '**.sql'
+      - '!.github/**'
+      - '!docs/**'
+  push:
+    branches:
+      - dev
+      - qa
+      - prod
+    paths:
+      - '**.sql'
+      - '!.github/**'
+      - '!docs/**'
+
+permissions:
+  contents: read
+  pull-requests: write  # For adding comments on PRs
+
+jobs:
+  validate-sql:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: syntax_check
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+        ports:
+          - 3306:3306
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for accurate diff
+
+      - name: Get changed SQL files
+        id: changed_files
+        run: |
+          # For PRs, compare against base branch
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+            mapfile -t SQL_FILES < <(git diff --name-only --diff-filter=d "$BASE_SHA"..."$HEAD_SHA" -- "*.sql" | \
+              grep -v "^\.github/" | \
+              grep -v "^docs/" || true)
+          else
+            # For push events, check files in the last commit
+            mapfile -t SQL_FILES < <(git diff --name-only --diff-filter=d HEAD~1 HEAD -- "*.sql" | \
+              grep -v "^\.github/" | \
+              grep -v "^docs/" || true)
+          fi
+
+          if [ ${#SQL_FILES[@]} -eq 0 ]; then
+            echo "No SQL files to validate"
+            echo "has_files=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "has_files=true" >> $GITHUB_OUTPUT
+          echo "Found ${#SQL_FILES[@]} SQL files to validate"
+
+          # Save files for next step
+          printf '%s\n' "${SQL_FILES[@]}" > /tmp/sql_files_to_validate.txt
+
+      - name: Wait for MySQL to be ready
+        if: steps.changed_files.outputs.has_files == 'true'
+        run: |
+          echo "Waiting for MySQL to be ready..."
+          for i in {1..30}; do
+            if mysql -h 127.0.0.1 -u root -ptest_password -e "SELECT 1" >/dev/null 2>&1; then
+              echo "MySQL is ready!"
+              break
+            fi
+            echo "Waiting for MySQL... (attempt $i/30)"
+            sleep 2
+          done
+
+      - name: Validate SQL syntax
+        if: steps.changed_files.outputs.has_files == 'true'
+        id: validate
+        run: |
+          VALIDATION_FAILED=0
+          FAILED_FILES=()
+          ERROR_MESSAGES=()
+
+          while IFS= read -r file; do
+            if [ ! -f "$file" ]; then
+              echo "Warning: File $file not found, skipping"
+              continue
+            fi
+
+            echo "Validating: $file"
+
+            # Try to parse the SQL using MySQL client
+            # Use --force to continue on errors but capture them
+            ERROR_OUTPUT=$(mysql -h 127.0.0.1 -u root -ptest_password syntax_check < "$file" 2>&1 || true)
+
+            # Check if there were any syntax errors
+            if echo "$ERROR_OUTPUT" | grep -i "ERROR" > /dev/null; then
+              VALIDATION_FAILED=1
+              FAILED_FILES+=("$file")
+              # Clean up error message (remove password warnings, etc.)
+              CLEAN_ERROR=$(echo "$ERROR_OUTPUT" | grep "ERROR" | head -5)
+              ERROR_MESSAGES+=("$file: $CLEAN_ERROR")
+              echo "❌ FAILED: $file"
+            else
+              echo "✅ PASSED: $file"
+            fi
+          done < /tmp/sql_files_to_validate.txt
+
+          if [ $VALIDATION_FAILED -eq 1 ]; then
+            echo "validation_failed=true" >> $GITHUB_OUTPUT
+            echo "## ❌ SQL Syntax Validation Failed" > /tmp/validation_report.md
+            echo "" >> /tmp/validation_report.md
+            echo "The following SQL files have syntax errors:" >> /tmp/validation_report.md
+            echo "" >> /tmp/validation_report.md
+            for i in "${!FAILED_FILES[@]}"; do
+              echo "### ${FAILED_FILES[$i]}" >> /tmp/validation_report.md
+              echo '```' >> /tmp/validation_report.md
+              echo "${ERROR_MESSAGES[$i]}" >> /tmp/validation_report.md
+              echo '```' >> /tmp/validation_report.md
+              echo "" >> /tmp/validation_report.md
+            done
+            exit 1
+          else
+            echo "validation_failed=false" >> $GITHUB_OUTPUT
+            echo "✅ All SQL files passed syntax validation"
+          fi
+
+      - name: Comment on PR (if validation failed)
+        if: failure() && github.event_name == 'pull_request' && steps.changed_files.outputs.has_files == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('/tmp/validation_report.md', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
+
+      - name: Summary
+        if: always() && steps.changed_files.outputs.has_files == 'true'
+        run: |
+          if [ "${{ steps.validate.outputs.validation_failed }}" = "true" ]; then
+            echo "❌ SQL syntax validation failed. Please fix the errors above."
+            exit 1
+          else
+            echo "✅ All SQL files are syntactically valid!"
+          fi

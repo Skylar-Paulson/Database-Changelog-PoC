@@ -253,13 +253,83 @@ jobs:
           echo "Created ZIP archive: $ZIP_FILE"
           echo "zip_file=$ZIP_FILE" >> $GITHUB_ENV
 
+      - name: Generate release notes
+        if: steps.sql_files.outputs.has_changes == 'true'
+        id: release_notes
+        env:
+          SINCE: ${{ steps.start_point.outputs.since }}
+          SINCE_DISPLAY: ${{ steps.start_point.outputs.display }}
+          ENV_UPPER: ${{ steps.validate.outputs.env_upper }}
+          RELEASE_TAG: ${{ steps.release_info.outputs.tag }}
+          TIMESTAMP: ${{ steps.release_info.outputs.timestamp }}
+        run: |
+          # Generate custom release notes with commit list
+
+          # Count SQL files
+          TOTAL_FILES=$(wc -l < /tmp/sorted_files.txt)
+
+          # Get commit list since start point
+          # Get commits between start point and HEAD, format as markdown list
+          COMMITS=$(git log --pretty=format:"* %s (%h) - %an" "${SINCE}..HEAD" | head -20)
+          COMPARE_LINK="**Full Changelog**: https://github.com/${{ github.repository }}/compare/${SINCE}...${RELEASE_TAG}"
+
+          # Build release notes
+          cat > /tmp/release_notes.md << 'EOF'
+          ## Database Changelog Release (Manual)
+
+          **Environment:** $ENV_UPPER
+          **Generated:** $TIMESTAMP
+          **Changes Since:** $SINCE_DISPLAY
+          **Total SQL Files:** $TOTAL_FILES
+
+          > **Note:** This release was manually generated using workflow dispatch.
+
+          ### Release Assets
+
+          1. **Compiled SQL File** (`database-changelog-$RELEASE_TAG.sql`)
+             - Main deployment file - copy-paste ready for execution
+             - Contains all database changes in chronological order with metadata
+
+          2. **ZIP Archive** (`database-changelog-$RELEASE_TAG.zip`)
+             - Individual SQL files in original folder structure
+             - For reference, audit trail, or debugging
+
+          3. **Release Notes** (this file)
+             - Context and commit history for this release
+
+          ### How to Deploy
+
+          1. Download the compiled SQL file from this release
+          2. Review all SQL statements carefully
+          3. Execute in the $ENV_UPPER database(s)
+          4. Verify changes were applied successfully
+
+          ### Commits Included
+
+          EOF
+
+          # Append commits
+          echo "$COMMITS" >> /tmp/release_notes.md
+          echo "" >> /tmp/release_notes.md
+          echo "$COMPARE_LINK" >> /tmp/release_notes.md
+
+          # Substitute environment variables in the markdown
+          envsubst < /tmp/release_notes.md > /tmp/release_notes_final.md
+
+          # Output for next step (escape newlines for GitHub Actions)
+          {
+            echo 'body<<RELEASE_NOTES_EOF'
+            cat /tmp/release_notes_final.md
+            echo 'RELEASE_NOTES_EOF'
+          } >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         if: steps.sql_files.outputs.has_changes == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_info.outputs.tag }}
           name: ${{ steps.release_info.outputs.name }}
-          generate_release_notes: true
+          body: ${{ steps.release_notes.outputs.body }}
           files: |
             ${{ env.output_file }}
             ${{ env.zip_file }}

@@ -114,17 +114,17 @@ jobs:
           ENV_UPPER: ${{ steps.env.outputs.env }}
         run: |
           TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          TAG_DATE=$(date -u +"%Y.%m.%d")
-          RELEASE_TIME=$(date -u +"%H%M")
+          TAG_DATETIME=$(date -u +"%Y.%m.%d.%H%M")
 
           # Count existing tags to generate incrementing suffix
-          # This ensures chronological order (newest first) via incrementing number
-          # GitHub sorts tags alphabetically, so YYYY.MM.DD-## ensures newest at top
+          # This ensures chronological order (newest first) via alphabetical sorting
+          # GitHub sorts tags alphabetically, so YYYY.MM.DD.HHMM-## ensures newest at top
+          # Date handles midnight rollover (2025.10.16.0000 > 2025.10.15.2359)
           TAG_COUNT=$(git tag -l | wc -l)
           SORT_SUFFIX=$((TAG_COUNT + 1))
 
-          RELEASE_TAG="${TAG_DATE}-${SORT_SUFFIX}"
-          RELEASE_NAME="${ENV_UPPER} - ${TAG_DATE}.${RELEASE_TIME}"
+          RELEASE_TAG="${TAG_DATETIME}-${SORT_SUFFIX}"
+          RELEASE_NAME="${ENV_UPPER} - ${TAG_DATETIME}"
 
           echo "tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
           echo "name=$RELEASE_NAME" >> $GITHUB_OUTPUT
